@@ -1,4 +1,7 @@
 from flight_environment import FlightEnvironment
+from path_planner import PathPlanner
+from trajectory_generator import TrajectoryGenerator
+import numpy as np
 
 env = FlightEnvironment(50)
 start = (1,2,0)
@@ -13,8 +16,15 @@ goal = (18,18,3)
 #   - column 3 contains the z-coordinates of all path points
 # This `path` array will be provided to the `env` object for visualization.
 
-path = [[0,0,0],[1,1,1],[2,2,2],[3,3,3]]
+# path = [[0,0,0],[1,1,1],[2,2,2],[3,3,3]]
+# Call your path planning algorithm here.
+print("Planning path...")
+planner = PathPlanner(env)
+path = planner.plan(start, goal)
 
+# 确保 path 是 numpy array 格式
+path = np.array(path)
+print(f"Path found with {len(path)} points.")
 # --------------------------------------------------------------------------------------------------- #
 
 
@@ -34,7 +44,12 @@ env.plot_cylinders(path)
 #   points on the same figure to clearly show how the continuous trajectory
 #   follows these path points.
 
-
+# 1. 引入类 (放在文件顶部或这里)
+print("Generating trajectory...")
+traj_gen = TrajectoryGenerator()
+t_eval, trajectory, original_path = traj_gen.generate_trajectory(path, avg_speed=3.0)
+#   After generating the trajectory, plot it in a new figure.
+traj_gen.visualize(t_eval, trajectory, original_path)
 
 
 # --------------------------------------------------------------------------------------------------- #
