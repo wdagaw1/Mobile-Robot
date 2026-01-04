@@ -14,6 +14,7 @@ must clearly explain the reason in your report.
 import numpy as np
 import heapq
 import math
+import random  # [新增] 为了 RRT 算法引入
 
 import numpy as np
 import heapq
@@ -128,11 +129,131 @@ class PathPlanner:
         path.reverse()
         return np.array(path)
 
+    # -----------------------------------------------------------------------
+    # [新增功能] 下面的代码是为了丰富作业内容而新增的高级功能
+    # -----------------------------------------------------------------------
 
+    def simplify_path(self, path):
+        """
+        路径平滑/剪枝算法 (Floyd's Algorithm 变体)
+        原理：如果节点 i 和节点 k 之间没有障碍物，则直接连接 i->k，跳过中间的节点 j。
+        这可以将 A* 的"锯齿状"路径拉直。
+        """
+        if len(path) < 3:
+            return np.array(path)
 
+        # 转换为列表便于操作
+        path = [np.array(p) for p in path]
+        simplified = [path[0]]
+        current_idx = 0
 
+        while current_idx < len(path) - 1:
+            # 贪心策略：从当前点尽可能往后找，找到最远的一个可见点
+            # 我们倒序遍历，一旦找到一个无碰撞连接，就是最远的
+            for check_idx in range(len(path) - 1, current_idx, -1):
+                if not self._check_line_collision(path[current_idx], path[check_idx]):
+                    # 发现从 current 直接连到 check_idx 是安全的
+                    simplified.append(path[check_idx])
+                    current_idx = check_idx
+                    break
+            else:
+                # 理论上只要相邻点连通就不会进这里，但为了安全起见：
+                current_idx += 1
+                simplified.append(path[current_idx])
 
+        return np.array(simplified)
 
+    def plan_rrt(self, start_idx, goal_idx, max_iter=3000, step_size=1.0):
+        """
+         RRT (Rapidly-exploring Random Tree) 算法
+        这是一个基于采样的算法，与 A* (基于搜索) 形成鲜明对比。
+        """
+        start_node = np.array(start_idx)
+        goal_node = np.array(goal_idx)
 
+        # 树结构: 列表存储节点，每个节点是 (坐标, 父节点索引)
+        # 初始时只有起点，父节点索引为 None
+        node_list = [(start_node, None)]
 
+        print("Running RRT planner...")
 
+        for i in range(max_iter):
+            # 1. 采样 (Sampling)
+            # 50% 概率采样目标点 (Goal Bias)，加快收敛；50% 随机采样
+            if random.random() < 0.5:
+                rnd_point = goal_node
+            else:
+                rnd_point = np.array([
+                    random.uniform(0, self.env.env_width),
+                    random.uniform(0, self.env.env_length),
+                    random.uniform(0, self.env.env_height)
+                ])
+
+            # 2. 寻找最近邻 (Nearest Neighbor)
+            # 计算采样点与树中所有节点的距离
+            dists = [np.linalg.norm(node[0] - rnd_point) for node in node_list]
+            nearest_idx = np.argmin(dists)
+            nearest_node = node_list[nearest_idx][0]
+
+            # 3. 扩展 (Steer)
+            # 从最近节点向采样点延伸 step_size 的距离
+            direction = rnd_point - nearest_node
+            length = np.linalg.norm(direction)
+
+            if length == 0:
+                continue
+
+            # 归一化并计算新位置
+            new_pos = nearest_node + (direction / length) * min(step_size, length)
+
+            # 4. 碰撞检测 (Collision Check)
+            if not self.env.is_outside(new_pos) and \
+               not self.env.is_collide(new_pos) and \
+               not self._check_line_collision(nearest_node, new_pos):
+
+                # 添加新节点到树中
+                node_list.append((new_pos, nearest_idx))
+
+                # 5. 判断是否到达目标 (Goal Reached)
+                if np.linalg.norm(new_pos - goal_node) <= step_size:
+                    # 尝试直接连接到终点
+                    if not self._check_line_collision(new_pos, goal_node):
+                        print(f"RRT reached goal in {i} iterations!")
+                        # 添加终点并回溯路径
+                        node_list.append((goal_node, len(node_list)-1))
+                        return self._backtrack_rrt(node_list)
+
+        print("RRT Failed to find a path!")
+        return np.array([start_idx])
+
+    def _check_line_collision(self, p1, p2):
+        """
+         辅助函数：检测两点 p1, p2 之间的线段是否与障碍物碰撞
+        通过在两点之间进行插值采样来检查
+        """
+        p1 = np.array(p1)
+        p2 = np.array(p2)
+        dist = np.linalg.norm(p1 - p2)
+        if dist < 1e-3: return False
+
+        # 采样步长，必须小于障碍物的最小特征，这里选0.2
+        step = 0.2
+        num_samples = int(math.ceil(dist / step))
+
+        for i in range(num_samples + 1):
+            t = i / num_samples
+            point = p1 + (p2 - p1) * t
+            if self.env.is_collide(point):
+                return True
+        return False
+
+    def _backtrack_rrt(self, node_list):
+        """ 从 RRT 树中回溯路径"""
+        path = []
+        current_idx = len(node_list) - 1
+        while current_idx is not None:
+            node, parent_idx = node_list[current_idx]
+            path.append(node)
+            current_idx = parent_idx
+        path.reverse()
+        return np.array(path)
