@@ -4,6 +4,7 @@ from trajectory_generator import TrajectoryGenerator
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 env = FlightEnvironment(50)
 start = (1, 2, 0)
@@ -51,45 +52,45 @@ print("Displaying 3D Path Comparison...")
 fig = plt.figure(figsize=(10, 8))
 ax = fig.add_subplot(111, projection='3d')
 
-# 1. 绘制障碍物 (复用 env 中的数据)
-for cx, cy, h, r in env.cylinders:
-    z = np.linspace(0, h, 30)
-    theta = np.linspace(0, 2 * np.pi, 30)
-    theta, z = np.meshgrid(theta, z)
-    x = cx + r * np.cos(theta)
-    y = cy + r * np.sin(theta)
-    ax.plot_surface(x, y, z, color='skyblue', alpha=0.3)
-    # 绘制顶盖
-    theta2 = np.linspace(0, 2 * np.pi, 30)
-    x_top = cx + r * np.cos(theta2)
-    y_top = cy + r * np.sin(theta2)
-    z_top = np.ones_like(theta2) * h
-    ax.plot_trisurf(x_top, y_top, z_top, color='steelblue', alpha=0.3)
+# # 1. 绘制障碍物 (复用 env 中的数据)
+# for cx, cy, h, r in env.cylinders:
+#     z = np.linspace(0, h, 30)
+#     theta = np.linspace(0, 2 * np.pi, 30)
+#     theta, z = np.meshgrid(theta, z)
+#     x = cx + r * np.cos(theta)
+#     y = cy + r * np.sin(theta)
+#     ax.plot_surface(x, y, z, color='skyblue', alpha=0.3)
+#     # 绘制顶盖
+#     theta2 = np.linspace(0, 2 * np.pi, 30)
+#     x_top = cx + r * np.cos(theta2)
+#     y_top = cy + r * np.sin(theta2)
+#     z_top = np.ones_like(theta2) * h
+#     ax.plot_trisurf(x_top, y_top, z_top, color='steelblue', alpha=0.3)
 
-# 2. 绘制 A* 路径 (蓝色)
-if len(smooth_path) > 1:
-    p1 = np.array(smooth_path)
-    ax.plot(p1[:, 0], p1[:, 1], p1[:, 2], label='A* (Smoothed)', color='blue', linewidth=3, marker='o', markersize=3)
+# # 2. 绘制 A* 路径 (蓝色)
+# if len(smooth_path) > 1:
+#     p1 = np.array(smooth_path)
+#     ax.plot(p1[:, 0], p1[:, 1], p1[:, 2], label='A* (Smoothed)', color='blue', linewidth=3, marker='o', markersize=3)
 
-# 3. 绘制 RRT 路径 (红色虚线) - 只有找到路径才画
-if len(rrt_path) > 1:
-    p2 = np.array(rrt_path)
-    ax.plot(p2[:, 0], p2[:, 1], p2[:, 2], label='RRT', color='red', linewidth=3, linestyle='--', marker='^',
-            markersize=3)
-else:
-    print("Warning: RRT failed to generate a valid path, skipping 3D plot for RRT.")
+# # 3. 绘制 RRT 路径 (红色虚线) - 只有找到路径才画
+# if len(rrt_path) > 1:
+#     p2 = np.array(rrt_path)
+#     ax.plot(p2[:, 0], p2[:, 1], p2[:, 2], label='RRT', color='red', linewidth=3, linestyle='--', marker='^',
+#             markersize=3)
+# else:
+#     print("Warning: RRT failed to generate a valid path, skipping 3D plot for RRT.")
 
-# 设置坐标轴和比例 (复用 env 的 helper 函数)
-ax.set_xlim(0, env.env_width)
-ax.set_ylim(0, env.env_length)
-ax.set_zlim(0, env.env_height)
-ax.set_xlabel('X')
-ax.set_ylabel('Y')
-ax.set_zlabel('Z')
-ax.set_title("3D Path Comparison: A* (Blue) vs RRT (Red)")
-ax.legend(loc='upper right')  # 指定位置避免 warning
-env.set_axes_equal(ax)
-plt.show()
+# # 设置坐标轴和比例 (复用 env 的 helper 函数)
+# ax.set_xlim(0, env.env_width)
+# ax.set_ylim(0, env.env_length)
+# ax.set_zlim(0, env.env_height)
+# ax.set_xlabel('X')
+# ax.set_ylabel('Y')
+# ax.set_zlabel('Z')
+# ax.set_title("3D Path Comparison: A* (Blue) vs RRT (Red)")
+# ax.legend(loc='upper right')  # 指定位置避免 warning
+# env.set_axes_equal(ax)
+# plt.show()
 
 # --------------------------------------------------------------------------------------------------- #
 #   Call your trajectory planning algorithm here. The algorithm should
@@ -120,26 +121,59 @@ else:
 
 #   After generating the trajectory, plot it in a new figure.
 # [修改] 手动绘制对比图，区分颜色，并处理 RRT 可能为空的情况
-print("Displaying Trajectory Comparison...")
-fig, axes = plt.subplots(3, 1, figsize=(8, 10), sharex=True)
-labels = ['x', 'y', 'z']
+print("Displaying 3D Path Comparison (Poly3DCollection Optimized)...")
+fig = plt.figure(figsize=(10, 8))
+ax = fig.add_subplot(111, projection='3d')
 
-for i in range(3):
-    # 绘制 A* (蓝色实线)
-    if t_eval_a is not None:
-        axes[i].plot(t_eval_a, traj_a[:, i], color='blue', linewidth=2, label='A* (Smoothed)')
+# --- 1. 使用 Poly3DCollection 批量绘制障碍物 ---
+all_faces = []
+res_theta = 8  # 八棱柱，兼顾视觉和性能
 
-    # 绘制 RRT (红色虚线) - 只有当 RRT 成功时才画
-    if t_eval_r is not None:
-        axes[i].plot(t_eval_r, traj_r[:, i], color='red', linewidth=2, linestyle='--', label='RRT')
+for cx, cy, h, r in env.cylinders:
+    # 计算底面和顶面的顶点
+    theta = np.linspace(0, 2 * np.pi, res_theta, endpoint=False)
+    x_base = cx + r * np.cos(theta)
+    y_base = cy + r * np.sin(theta)
+    
+    # 构造侧面面片
+    for i in range(res_theta):
+        next_i = (i + 1) % res_theta
+        # 每个侧面由 4 个顶点组成
+        face = [
+            [x_base[i], y_base[i], 0],
+            [x_base[next_i], y_base[next_i], 0],
+            [x_base[next_i], y_base[next_i], h],
+            [x_base[i], y_base[i], h]
+        ]
+        all_faces.append(face)
+    
+    # 构造顶盖面片
+    top_face = [[x_base[i], y_base[i], h] for i in range(res_theta)]
+    all_faces.append(top_face)
 
-    axes[i].set_ylabel(f'{labels[i]} (m)')
-    axes[i].grid(True)
-    axes[i].legend(loc='upper left')
+# 创建集合：设置不透明度 alpha=1, 关闭阴影
+poly_collection = Poly3DCollection(all_faces, facecolors='skyblue', edgecolors='steelblue', alpha=1.0, shade=False)
+ax.add_collection3d(poly_collection)
 
-axes[2].set_xlabel('Time (s)')
-plt.suptitle('Trajectory Comparison: A* vs RRT')
-plt.tight_layout()
+# --- 2. 绘制路径 (保持不变，但增加 zorder 确保在障碍物上方) ---
+if len(smooth_path) > 1:
+    p1 = np.array(smooth_path)
+    ax.plot(p1[:, 0], p1[:, 1], p1[:, 2], label='A* (Smoothed)', color='blue', linewidth=3, zorder=10)
+
+if len(rrt_path) > 1:
+    p2 = np.array(rrt_path)
+    ax.plot(p2[:, 0], p2[:, 1], p2[:, 2], label='RRT', color='red', linewidth=2, linestyle='--', zorder=11)
+
+# --- 3. 场景设置 ---
+ax.set_xlim(0, env.env_width)
+ax.set_ylim(0, env.env_length)
+ax.set_zlim(0, env.env_height)
+ax.set_xlabel('X')
+ax.set_ylabel('Y')
+ax.set_zlabel('Z')
+ax.set_title("Optimized 3D View: A* vs RRT")
+ax.legend()
+env.set_axes_equal(ax)
 plt.show()
 
 # --------------------------------------------------------------------------------------------------- #
