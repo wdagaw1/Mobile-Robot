@@ -48,9 +48,9 @@ path = np.array(path)
 
 # --------------------------------------------------------------------------------------------------- #
 # [修改] 为了区分颜色，我们在这里手动绘制 3D 场景，而不是调用 env.plot_cylinders(path)
-print("Displaying 3D Path Comparison...")
-fig = plt.figure(figsize=(10, 8))
-ax = fig.add_subplot(111, projection='3d')
+# print("Displaying 3D Path Comparison...")
+# fig = plt.figure(figsize=(10, 8))
+# ax = fig.add_subplot(111, projection='3d')
 
 # # 1. 绘制障碍物 (复用 env 中的数据)
 # for cx, cy, h, r in env.cylinders:
@@ -110,12 +110,16 @@ print("Generating trajectory...")
 traj_gen = TrajectoryGenerator()
 
 # [修改] 分别生成两条轨迹，增加对 RRT 是否成功的判断
-t_eval_a, traj_a, _ = traj_gen.generate_trajectory(smooth_path, avg_speed=3.0)
+t_eval_a, traj_a, vel_a, acc_a, safe_a = traj_gen.generate_trajectory(smooth_path, avg_speed=3.0, env=env)
+
+print(f"A* Trajectory generated. Safety check: {'Pass' if safe_a else 'Fail'}")
 
 # 初始化 RRT 轨迹数据为 None
-t_eval_r, traj_r = None, None
+t_eval_r, traj_r, vel_r, acc_r, safe_r = None, None, None, None, False
 if len(rrt_path) > 1:
-    t_eval_r, traj_r, _ = traj_gen.generate_trajectory(rrt_path, avg_speed=3.0)
+    # 同样修改为 5 个返回值
+    t_eval_r, traj_r, vel_r, acc_r, safe_r = traj_gen.generate_trajectory(rrt_path, avg_speed=3.0, env=env)
+    print(f"RRT Trajectory generated. Safety check: {'Pass' if safe_r else 'Fail'}")
 else:
     print("Warning: RRT path too short, skipping RRT trajectory generation.")
 
@@ -172,9 +176,21 @@ ax.set_xlabel('X')
 ax.set_ylabel('Y')
 ax.set_zlabel('Z')
 ax.set_title("Optimized 3D View: A* vs RRT")
+
+if traj_a is not None:
+    ax.plot(traj_a[:, 0], traj_a[:, 1], traj_a[:, 2], color='cyan', linewidth=1, alpha=0.8, label='A* Trajectory')
+
+# 绘制 RRT 的连续平滑轨迹 (用浅红色实线)
+if traj_r is not None:
+    ax.plot(traj_r[:, 0], traj_r[:, 1], traj_r[:, 2], color='salmon', linewidth=1, alpha=0.8, label='RRT Trajectory')
+
 ax.legend()
 env.set_axes_equal(ax)
 plt.show()
+
+if traj_a is not None:
+    # 使用我们新改进的动力学分析绘图
+    traj_gen.visualize_dynamics(t_eval_a, traj_a, vel_a, acc_a, smooth_path)
 
 # --------------------------------------------------------------------------------------------------- #
 
