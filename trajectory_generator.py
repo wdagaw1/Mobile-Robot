@@ -22,8 +22,8 @@ class TrajectoryGenerator:
         total_time = waypoints_t[-1]
 
         # 2. 生成样条曲线 (C2 连续)
-        # bc_type='clamped' 确保起终点速度为 0，符合机器人起停逻辑
-        cs = CubicSpline(waypoints_t, path, axis=0, bc_type='clamped')
+        # bc_type='natural' 减少端点强约束导致的全局弯曲，使轨迹更贴近路径
+        cs = CubicSpline(waypoints_t, path, axis=0, bc_type='natural')
 
         # 3. 采样并计算导数 (位置、速度、加速度)
         sample_dt = 0.05

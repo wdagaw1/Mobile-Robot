@@ -8,7 +8,7 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 env = FlightEnvironment(50)
 start = (1, 2, 0)
-goal = (18, 18, 3)
+goal = (18, 18, 4)
 
 # --------------------------------------------------------------------------------------------------- #
 # Call your path planning algorithm here.
@@ -155,18 +155,18 @@ for cx, cy, h, r in env.cylinders:
     top_face = [[x_base[i], y_base[i], h] for i in range(res_theta)]
     all_faces.append(top_face)
 
-# 创建集合：设置不透明度 alpha=1, 关闭阴影
-poly_collection = Poly3DCollection(all_faces, facecolors='skyblue', edgecolors='steelblue', alpha=1.0, shade=False)
+# 创建集合：设置不透明度 alpha=0.8，既有遮挡感又能隐约看到背面线条，缓解渲染排序问题
+poly_collection = Poly3DCollection(all_faces, facecolors='skyblue', edgecolors='steelblue', alpha=0.8, shade=False)
 ax.add_collection3d(poly_collection)
 
-# --- 2. 绘制路径 (保持不变，但增加 zorder 确保在障碍物上方) ---
+# --- 2. 绘制路径 (作为参考线：虚线 + 深色) ---
 if len(smooth_path) > 1:
     p1 = np.array(smooth_path)
-    ax.plot(p1[:, 0], p1[:, 1], p1[:, 2], label='A* (Smoothed)', color='blue', linewidth=3, zorder=10)
+    ax.plot(p1[:, 0], p1[:, 1], p1[:, 2], label='A* Path (Ref)', color='navy', linestyle='--', linewidth=1.5, marker='.', markersize=4)
 
 if len(rrt_path) > 1:
     p2 = np.array(rrt_path)
-    ax.plot(p2[:, 0], p2[:, 1], p2[:, 2], label='RRT', color='red', linewidth=2, linestyle='--', zorder=11)
+    ax.plot(p2[:, 0], p2[:, 1], p2[:, 2], label='RRT Path (Ref)', color='darkred', linestyle='--', linewidth=1.5, marker='.', markersize=4)
 
 # --- 3. 场景设置 ---
 ax.set_xlim(0, env.env_width)
@@ -177,16 +177,111 @@ ax.set_ylabel('Y')
 ax.set_zlabel('Z')
 ax.set_title("Optimized 3D View: A* vs RRT")
 
+# --- 4. 绘制连续轨迹 (作为主体：实线 + 亮色 + 较粗) ---
 if traj_a is not None:
-    ax.plot(traj_a[:, 0], traj_a[:, 1], traj_a[:, 2], color='cyan', linewidth=1, alpha=0.8, label='A* Trajectory')
+    ax.plot(traj_a[:, 0], traj_a[:, 1], traj_a[:, 2], label='A* Trajectory', color='cyan', linestyle='-', linewidth=2.5, alpha=0.9)
 
-# 绘制 RRT 的连续平滑轨迹 (用浅红色实线)
 if traj_r is not None:
-    ax.plot(traj_r[:, 0], traj_r[:, 1], traj_r[:, 2], color='salmon', linewidth=1, alpha=0.8, label='RRT Trajectory')
+    ax.plot(traj_r[:, 0], traj_r[:, 1], traj_r[:, 2], label='RRT Trajectory', color='magenta', linestyle='-', linewidth=2.5, alpha=0.9)
 
 ax.legend()
-env.set_axes_equal(ax)
+# env.set_axes_equal(ax)
+ax.set_box_aspect((1, 1, 0.3))
 plt.show()
+
+# --------------------------------------------------------------------------------------------------- #
+# [新增] 使用 Plotly 生成高质量交互式 3D 可视化 (完美解决遮挡问题)
+print("Generating Plotly 3D visualization...")
+import plotly.graph_objects as go
+
+def plot_cylinder_plotly(fig, cx, cy, h, r, color='lightblue', opacity=0.8):
+    # 生成圆柱体侧面网格
+    theta = np.linspace(0, 2*np.pi, 30)
+    z = np.linspace(0, h, 2)
+    theta_grid, z_grid = np.meshgrid(theta, z)
+    x_grid = cx + r * np.cos(theta_grid)
+    y_grid = cy + r * np.sin(theta_grid)
+    
+    fig.add_trace(go.Surface(x=x_grid, y=y_grid, z=z_grid, 
+                             colorscale=[[0, color], [1, color]], 
+                             showscale=False, opacity=opacity, hoverinfo='skip'))
+    
+    # 生成顶盖和底盖
+    for z_cap in [0, h]:
+        x_cap = cx + r * np.cos(theta)
+        y_cap = cy + r * np.sin(theta)
+        # 用 Mesh3d 画盖子
+        fig.add_trace(go.Mesh3d(x=x_cap, y=y_cap, z=np.full_like(x_cap, z_cap), 
+                                color=color, opacity=opacity, alphahull=0))
+
+# 创建 Plotly 图表对象
+fig_plotly = go.Figure()
+
+# 1. 绘制所有障碍物
+for cx, cy, h, r in env.cylinders:
+    plot_cylinder_plotly(fig_plotly, cx, cy, h, r, color='skyblue')
+
+# 2. 绘制路径 (Path)
+if len(smooth_path) > 1:
+    p1 = np.array(smooth_path)
+    fig_plotly.add_trace(go.Scatter3d(
+        x=p1[:, 0], y=p1[:, 1], z=p1[:, 2],
+        mode='lines+markers',
+        line=dict(color='navy', width=3, dash='dash'),
+        marker=dict(size=3, color='navy'),
+        name='A* Path (Ref)'
+    ))
+
+if len(rrt_path) > 1:
+    p2 = np.array(rrt_path)
+    fig_plotly.add_trace(go.Scatter3d(
+        x=p2[:, 0], y=p2[:, 1], z=p2[:, 2],
+        mode='lines+markers',
+        line=dict(color='darkred', width=3, dash='dash'),
+        marker=dict(size=3, color='darkred'),
+        name='RRT Path (Ref)'
+    ))
+
+# 3. 绘制轨迹 (Trajectory)
+if traj_a is not None:
+    fig_plotly.add_trace(go.Scatter3d(
+        x=traj_a[:, 0], y=traj_a[:, 1], z=traj_a[:, 2],
+        mode='lines',
+        line=dict(color='cyan', width=6),
+        name='A* Trajectory'
+    ))
+
+if traj_r is not None:
+    fig_plotly.add_trace(go.Scatter3d(
+        x=traj_r[:, 0], y=traj_r[:, 1], z=traj_r[:, 2],
+        mode='lines',
+        line=dict(color='magenta', width=6),
+        name='RRT Trajectory'
+    ))
+
+# 4. 设置场景布局
+fig_plotly.update_layout(
+    title="3D Trajectory Visualization (Interactive)",
+    scene=dict(
+        xaxis=dict(range=[0, env.env_width], title='X'),
+        yaxis=dict(range=[0, env.env_length], title='Y'),
+        zaxis=dict(range=[0, env.env_height], title='Z'),
+        aspectmode='manual',
+        aspectratio=dict(x=1, y=1, z=0.3)
+    ),
+    width=1000,
+    height=800
+)
+
+# 保存并打开
+output_file = "trajectory_visualization.html"
+fig_plotly.write_html(output_file)
+print(f"Plotly visualization saved to {output_file}. Please open it in your browser.")
+try:
+    import webbrowser
+    webbrowser.open(output_file)
+except:
+    pass
 
 if traj_a is not None:
     # 使用我们新改进的动力学分析绘图

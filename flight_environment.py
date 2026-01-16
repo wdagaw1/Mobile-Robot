@@ -81,7 +81,7 @@ class FlightEnvironment:
     
 
 
-    def is_collide(self, point, epsilon=0.2):
+    def is_collide(self, point, epsilon=0.5):
             """
             Check whether a point in 3D space collides with a given set of cylinders (including a safety margin).
 
@@ -140,7 +140,7 @@ class FlightEnvironment:
 
         ax.set_xlim(0, self.env_width)
         ax.set_ylim(0, self.env_length)
-        ax.set_zlim(0, self.env_height)
+        ax.set_zlim(0, 8)
 
 
         if path is not None:
@@ -149,7 +149,9 @@ class FlightEnvironment:
             ax.plot(xs, ys, zs, linewidth=2)     
             ax.scatter(xs[0], ys[0], zs[0], s=40) 
             ax.scatter(xs[-1], ys[-1], zs[-1], s=40) 
-        self.set_axes_equal(ax)
+
+        ax.set_box_aspect((1, 1, 0.3))
+        # self.set_axes_equal(ax)
         plt.show()
 
 

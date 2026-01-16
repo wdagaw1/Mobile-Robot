@@ -236,8 +236,8 @@ class PathPlanner:
         dist = np.linalg.norm(p1 - p2)
         if dist < 1e-3: return False
 
-        # 采样步长，必须小于障碍物的最小特征，这里选0.2
-        step = 0.2
+        # 采样步长，必须小于障碍物的最小特征，这里选0.05以提高精度
+        step = 0.05
         num_samples = int(math.ceil(dist / step))
 
         for i in range(num_samples + 1):
